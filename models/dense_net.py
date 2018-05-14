@@ -335,6 +335,10 @@ class DenseNet:
         return tf.get_variable(name, initializer=initial)
 
     def _build_graph(self, batch_size):
+        images, labels = self.input_pipeline(batch_size, self.data_provider.train)
+        self.images = tf.cast(images, tf.float32)
+        #self.sess.run(self.images)
+        self.labels = tf.cast(labels, tf.float32)
         growth_rate = self.growth_rate
         layers_per_block = self.layers_per_block
         # first - initial 3 x 3 conv to first_output_features
@@ -357,9 +361,6 @@ class DenseNet:
             logits = self.transition_layer_to_classes(output)
         prediction = tf.nn.softmax(logits)
 
-        images, labels = self.input_pipeline(batch_size, self.data_provider.train)
-        self.images = images
-        self.labels = labels
 
 
         # Losses
