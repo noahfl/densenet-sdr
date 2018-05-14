@@ -79,6 +79,7 @@ class SVHNDataProvider(DataProvider):
             one_hot: `bool`, return lasels one hot encoded
         """
         self._save_path = save_path
+        self.batch_size = kwargs['batch_size']
         train_images = []
         train_labels = []
         for part in ['train', 'extra']:

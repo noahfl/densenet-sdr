@@ -45,6 +45,7 @@ class DenseNet:
                 reduction or not.
         """
         self.data_provider = data_provider
+        self.batch_size = self.data_provider.batch_size
         self.data_shape = data_provider.data_shape
         self.n_classes = data_provider.n_classes
         self.depth = depth
@@ -78,11 +79,12 @@ class DenseNet:
         self.should_save_model = should_save_model
         self.renew_logs = renew_logs
         self.batches_step = 0
+        self.is_training = tf.constant(True, dtype=tf.bool)
 
         self._define_inputs()
-        self._build_graph()
-        self._initialize_session()
-        self._count_trainable_params()
+#        self._build_graph()
+#        self._initialize_session()
+#        self._count_trainable_params()
 
     def _initialize_session(self):
         """Initialize session, variables, saver"""
@@ -164,21 +166,32 @@ class DenseNet:
         self.summary_writer.add_summary(summary, epoch)
 
     def _define_inputs(self):
-        shape = [None]
+        shape = [self.batch_size]
         shape.extend(self.data_shape)
-        self.images = tf.placeholder(
-            tf.float32,
-            shape=shape,
-            name='input_images')
-        self.labels = tf.placeholder(
-            tf.float32,
-            shape=[None, self.n_classes],
-            name='labels')
-        self.learning_rate = tf.placeholder(
-            tf.float32,
-            shape=[],
-            name='learning_rate')
-        self.is_training = tf.placeholder(tf.bool, shape=[])
+
+        self.images = tf.get_variable('input_images',
+            shape=shape, initializer=tf.zeros_initializer(dtype=tf.float32))
+
+        #self.images = tf.placeholder(
+        #    tf.float32,
+        #    shape=shape,
+        #    name='input_images')
+        #self.labels = tf.placeholder(
+        #    tf.float32,
+        #    shape=[None, self.n_classes],
+        #    name='labels')
+        #labels_zeros = tf.zeros([None, self.n_classes], dtype=tf.float32)
+        self.labels = tf.get_variable('labels',
+            shape=[self.batch_size, self.n_classes],
+            initializer=tf.zeros_initializer(dtype=tf.float32))
+
+        self.learning_rate = tf.constant(0.1, dtype=tf.float32)
+        #self.learning_rate = tf.placeholder(
+        #    tf.float32,
+        #    shape=[],
+        #    name='learning_rate')
+        #self.is_training = tf.placeholder(tf.bool, shape=[])
+        #tf.assign(self.is_training, True)
 
     def composite_function(self, _input, out_features, kernel_size=3):
         """Function from paper H_l that performs:
@@ -321,7 +334,7 @@ class DenseNet:
         initial = tf.constant(0.0, shape=shape)
         return tf.get_variable(name, initializer=initial)
 
-    def _build_graph(self):
+    def _build_graph(self, batch_size):
         growth_rate = self.growth_rate
         layers_per_block = self.layers_per_block
         # first - initial 3 x 3 conv to first_output_features
@@ -344,6 +357,11 @@ class DenseNet:
             logits = self.transition_layer_to_classes(output)
         prediction = tf.nn.softmax(logits)
 
+        images, labels = self.input_pipeline(batch_size, self.data_provider.train)
+        self.images = images
+        self.labels = labels
+
+
         # Losses
         cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
             logits=logits, labels=self.labels))
@@ -354,13 +372,41 @@ class DenseNet:
         # optimizer and train step
         optimizer = tf.train.MomentumOptimizer(
             self.learning_rate, self.nesterov_momentum, use_nesterov=True)
-        self.train_step = optimizer.minimize(
+        self.optimizer = optimizer
+        self.train_step = self.optimizer.minimize(
             cross_entropy + l2_loss * self.weight_decay)
 
         correct_prediction = tf.equal(
             tf.argmax(prediction, 1),
             tf.argmax(self.labels, 1))
         self.accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+
+    def input_pipeline(self, batch_size, data, test=False):
+    
+        if test:
+            inputs, labels = data.images, data.labels
+            #continue
+            #batch_size = len(mnist.test.images)
+        else:
+            inputs, labels = data.images, data.labels
+        # min_after_dequeue defines how big a buffer we will randomly sample
+        #   from -- bigger means better shuffling but slower start up and more
+        #   memory used.
+        # capacity must be larger than min_after_dequeue and the amount larger
+        #   determines the maximum we will prefetch.  Recommendation:
+        #   min_after_dequeue + (num_threads + a small safety margin) * batch_size
+        min_after_dequeue = 1000
+        capacity = min_after_dequeue + 3 * batch_size
+        
+        if test:
+            example_batch, label_batch = tf.train.batch(
+                [inputs, labels], batch_size=batch_size, capacity=capacity,
+                enqueue_many=True)
+        else:
+            example_batch, label_batch = tf.train.shuffle_batch(
+                [inputs, labels], batch_size=batch_size, num_threads=3, capacity=capacity,
+                min_after_dequeue=min_after_dequeue, enqueue_many=True)
+        return example_batch, label_batch
 
     def train_all_epochs(self, train_params):
         n_epochs = train_params['n_epochs']
@@ -369,6 +415,10 @@ class DenseNet:
         reduce_lr_epoch_1 = train_params['reduce_lr_epoch_1']
         reduce_lr_epoch_2 = train_params['reduce_lr_epoch_2']
         total_start_time = time.time()
+        self._build_graph(batch_size)
+        self._initialize_session()
+        self._count_trainable_params()
+
         for epoch in range(1, n_epochs + 1):
             print("\n", '-' * 30, "Train epoch: %d" % epoch, '-' * 30, '\n')
             start_time = time.time()
@@ -403,21 +453,29 @@ class DenseNet:
             seconds=total_training_time)))
 
     def train_one_epoch(self, data, batch_size, learning_rate):
+        coord = tf.train.Coordinator()
+        threads = tf.train.start_queue_runners(sess=self.sess, coord=coord)
+        #self.images = images
+        #self.labels = labels
         num_examples = data.num_examples
+        self.learning_rate = learning_rate
         total_loss = []
         total_accuracy = []
+        self.is_training = tf.constant(True, dtype=tf.bool)
         for i in range(num_examples // batch_size):
-            batch = data.next_batch(batch_size)
-            images, labels = batch
-            feed_dict = {
-                self.images: images,
-                self.labels: labels,
-                self.learning_rate: learning_rate,
-                self.is_training: True,
-            }
-            fetches = [self.train_step, self.cross_entropy, self.accuracy]
-            result = self.sess.run(fetches, feed_dict=feed_dict)
+#            batch = data.next_batch(batch_size)
+#            images, labels = batch
+#            feed_dict = {
+#                self.images: images,
+#                self.labels: labels,
+#                self.learning_rate: learning_rate,
+#                self.is_training: True,
+#            }
+#            fetches = [self.train_step, self.cross_entropy, self.accuracy]
+#            result = self.sess.run(fetches, feed_dict=feed_dict)
+            result = self.sess.run([self.train_step, self.cross_entropy, self.accuracy])
             _, loss, accuracy = result
+            print("Iteration %d: loss=%f, accuracy=%f" % (i, loss, accuracy))
             total_loss.append(loss)
             total_accuracy.append(accuracy)
             if self.should_save_logs:
