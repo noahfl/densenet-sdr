@@ -384,12 +384,7 @@ class DenseNet:
 
     def input_pipeline(self, batch_size, data, test=False):
     
-        if test:
-            inputs, labels = data.images, data.labels
-            #continue
-            #batch_size = len(mnist.test.images)
-        else:
-            inputs, labels = data.images, data.labels
+        inputs, labels = data.images, data.labels
         # min_after_dequeue defines how big a buffer we will randomly sample
         #   from -- bigger means better shuffling but slower start up and more
         #   memory used.
@@ -463,6 +458,7 @@ class DenseNet:
         total_loss = []
         total_accuracy = []
         self.is_training = tf.constant(True, dtype=tf.bool)
+        
         for i in range(num_examples // batch_size):
 #            batch = data.next_batch(batch_size)
 #            images, labels = batch
@@ -484,6 +480,19 @@ class DenseNet:
                 self.log_loss_accuracy(
                     loss, accuracy, self.batches_step, prefix='per_batch',
                     should_print=False)
+            ####printer = tf.Print(self.accuracy, [tf.trainable_variables()])
+#            variables_names = [v.name for v in tf.trainable_variables()
+#                 if 'input' not in v.name and 'label' not in v.name
+#                and 'image' not in v.name]
+#            values = self.sess.run(variables_names)
+#            for k, v in zip(variables_names, values):
+#                #if 'label' in k or 'input' in k or 'image' in k:
+#                print("Variable: ", k)
+#                #print("Shape: ", v.shape)
+#                print(type(v))
+            ####printer = tf.Print(self.accuracy, [tf.global_variables(scope='Block_*')])
+            ####tf.global_variables(scope='Transition_after_block_*')
+            ####tf.global_variables(scope='Transition_to_classes')
         mean_loss = np.mean(total_loss)
         mean_accuracy = np.mean(total_accuracy)
         return mean_loss, mean_accuracy
@@ -492,15 +501,17 @@ class DenseNet:
         num_examples = data.num_examples
         total_loss = []
         total_accuracy = []
+        images, labels = self.input_pipeline(batch_size,
+            self.data_provider.test, test=True)
         for i in range(num_examples // batch_size):
-            batch = data.next_batch(batch_size)
-            feed_dict = {
-                self.images: batch[0],
-                self.labels: batch[1],
-                self.is_training: False,
-            }
-            fetches = [self.cross_entropy, self.accuracy]
-            loss, accuracy = self.sess.run(fetches, feed_dict=feed_dict)
+            #batch = data.next_batch(batch_size)
+            #feed_dict = {
+            #    self.images: batch[0],
+            #    self.labels: batch[1],
+            #    self.is_training: False,
+            #}
+            #fetches = [self.cross_entropy, self.accuracy]
+            loss, accuracy = self.sess.run([self.cross_entropy, self.accuracy])
             total_loss.append(loss)
             total_accuracy.append(accuracy)
         mean_loss = np.mean(total_loss)
