@@ -4,9 +4,9 @@ from models.dense_net import DenseNet
 from data_providers.utils import get_data_provider_by_name
 
 train_params_cifar = {
-    'batch_size': 64,
-    'n_epochs': 300,
-    'initial_learning_rate': 0.1,
+    'batch_size': 100,
+    'n_epochs': 100,
+    'initial_learning_rate': 0.01,
     'reduce_lr_epoch_1': 150,  # epochs * 0.5
     'reduce_lr_epoch_2': 225,  # epochs * 0.75
     'validation_set': True,
@@ -50,12 +50,12 @@ if __name__ == '__main__':
         default='DenseNet',
         help='What type of model to use')
     parser.add_argument(
-        '--growth_rate', '-k', type=int, choices=[12, 24, 40],
+        '--growth_rate', '-k', type=int, choices=[2, 12, 24, 40],
         default=12,
-        help='Grows rate for every layer, '
+        help='Growth rate for every layer, '
              'choices were restricted to used in paper')
     parser.add_argument(
-        '--depth', '-d', type=int, choices=[40, 100, 190, 250],
+        '--depth', '-d', type=int, choices=[2, 10, 40, 100, 190, 250],
         default=40,
         help='Depth of whole network, restricted to paper choices')
     parser.add_argument(

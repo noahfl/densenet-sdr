@@ -132,6 +132,7 @@ class CifarDataProvider(DataProvider):
                     chanel data by it's standart deviation
             one_hot: `bool`, return lasels one hot encoded
         """
+        self.batch_size = kwargs['batch_size']
         self._save_path = save_path
         self.one_hot = one_hot
         download_data_url(self.data_url, self.save_path)
