@@ -1,6 +1,10 @@
 DenseNet with TensorFlow
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
+
+*NOTE* This is a modified version of <https://github.com/ikhlestov/vision_networks/>. I have successfully implemented GPU support (on the 'gpu' branch) and am working on implementing stochastic delta rule in this repo.
+
+
 Two types of `Densely Connected Convolutional Networks <https://arxiv.org/abs/1608.06993>`__ (DenseNets) are available:
 
 - DenseNet - without bottleneck layers
