@@ -80,9 +80,9 @@ class DenseNet:
         self.renew_logs = renew_logs
         self.batches_step = 0
         self.is_training = tf.constant(True, dtype=tf.bool)
-        self.alpha = 0.1
+        self.alpha = 0.4
         self.beta = 0.1
-        self.zeta = 0.1
+        self.zeta = 0.2
         self._define_inputs()
 #        self._build_graph()
 #        self._initialize_session()
