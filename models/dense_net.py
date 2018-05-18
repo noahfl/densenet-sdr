@@ -80,7 +80,9 @@ class DenseNet:
         self.renew_logs = renew_logs
         self.batches_step = 0
         self.is_training = tf.constant(True, dtype=tf.bool)
-
+        self.alpha = 0.1
+        self.beta = 0.1
+        self.zeta = 0.1
         self._define_inputs()
 #        self._build_graph()
 #        self._initialize_session()
@@ -361,7 +363,14 @@ class DenseNet:
             logits = self.transition_layer_to_classes(output)
         prediction = tf.nn.softmax(logits)
 
-
+        with tf.variable_scope("means_vars", reuse=tf.AUTO_REUSE) as scope:
+            means_ = [tf.get_variable("means_" + str(k), initializer=tf.random_normal(
+                v.shape), trainable=False) for k, v in enumerate(tf.trainable_variables())]
+        
+        #with tf.variable_scope("vars", reuse=tf.AUTO_REUSE):
+            vars_ = [tf.get_variable("vars_" + str(k), initializer=tf.random_normal( 
+                v.shape), trainable=False) for k, v in enumerate(tf.trainable_variables())]
+ 
 
         # Losses
         cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
@@ -374,8 +383,56 @@ class DenseNet:
         optimizer = tf.train.MomentumOptimizer(
             self.learning_rate, self.nesterov_momentum, use_nesterov=True)
         self.optimizer = optimizer
-        self.train_step = self.optimizer.minimize(
+        #self.train_step = self.optimizer.minimize(
+        #    cross_entropy + l2_loss * self.weight_decay)
+        
+        grads_and_vars = self.optimizer.compute_gradients(
             cross_entropy + l2_loss * self.weight_decay)
+
+
+        vars_with_grad = [v for g, v in grads_and_vars if g is not None]
+        if not vars_with_grad:
+          raise ValueError(
+            "No gradients provided for any variable, check your graph for ops"
+            " that do not support gradients, between variables %s and loss %s." %
+            ([str(v) for _, v in grads_and_vars], loss))
+        tst = 0
+        with tf.variable_scope("means_vars", reuse=True) as scope:
+            mean_tmp = [tf.get_variable("means_"+str(k)) for k in range(len(tf.trainable_variables()))]
+            var_tmp = [tf.get_variable("vars_"+str(k)) for k in range(len(tf.trainable_variables()))]
+            for k, (g, v) in enumerate(grads_and_vars):
+                mean_tmp[k] = tf.add(tf.multiply(tf.constant(
+                    self.alpha, dtype=tf.float32), g), means_[k]) 
+    
+                var_tmp[k] = tf.abs(tf.multiply(tf.constant(
+                    self.zeta, dtype=tf.float32), tf.add(
+                    tf.multiply(tf.constant(self.beta,
+                    dtype=tf.float32), g), vars_[k])))
+    
+                mean_op = tf.assign(means_[k], mean_tmp[k])
+                var_op = tf.assign(vars_[k], var_tmp[k])
+                printer = tf.Print(mean_op, [mean_tmp[k]])
+                with tf.control_dependencies([mean_op, var_op]):
+                    #just to have something here in case the 
+                    #graph optimizes this away
+                    tst += k
+                    with tf.control_dependencies([printer]):
+                        tst *= k
+
+        self.train_step = self.optimizer.apply_gradients(
+            grads_and_vars)
+
+        with tf.variable_scope("means_vars", reuse=True) as scope:
+            trains = [v for v in tf.trainable_variables()]
+            apply_ = []
+            for k in range(len(trains)):
+                dist = tf.distributions.Normal(
+                    loc=trains[k], scale=vars_[k])
+                dist_ = tf.reshape(dist.sample([1]), trains[k].shape)
+                new_trainable = tf.add(means_[k], dist_)
+                apply_.append(tf.assign(tf.trainable_variables()[k], new_trainable))
+            with tf.control_dependencies([op for op in apply_]):
+                tst += 1
 
         correct_prediction = tf.equal(
             tf.argmax(prediction, 1),
