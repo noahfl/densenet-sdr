@@ -80,8 +80,8 @@ class DenseNet:
         self.renew_logs = renew_logs
         self.batches_step = 0
         self.is_training = tf.constant(True, dtype=tf.bool)
-        self.alpha = 0.4
-        self.beta = 0.1
+        self.alpha = 0.1
+        self.beta = 0.02
         self.zeta = 0.2
         self._define_inputs()
 #        self._build_graph()
@@ -363,14 +363,35 @@ class DenseNet:
             logits = self.transition_layer_to_classes(output)
         prediction = tf.nn.softmax(logits)
 
-        with tf.variable_scope("means_vars", reuse=tf.AUTO_REUSE) as scope:
-            means_ = [tf.get_variable("means_" + str(k), initializer=tf.random_normal(
-                v.shape), trainable=False) for k, v in enumerate(tf.trainable_variables())]
+        with tf.variable_scope("means_sd") as scope:
+#            means_ = [tf.get_variable("means_" + str(k), initializer=tf.random_normal(
+#                v.shape), trainable=True) for k, v in enumerate(tf.trainable_variables())]
         
         #with tf.variable_scope("vars", reuse=tf.AUTO_REUSE):
-            vars_ = [tf.get_variable("vars_" + str(k), initializer=tf.random_normal( 
-                v.shape), trainable=False) for k, v in enumerate(tf.trainable_variables())]
+#            sds_ = [tf.get_variable("sds_" + str(k), initializer=tf.random_normal( 
+#                v.shape), trainable=False) for k, v in enumerate(tf.trainable_variables())]
+            sds_ = [tf.get_variable("sds_" + str(k), initializer=tf.constant(
+                2, dtype=tf.float32, shape=v.shape), trainable=False) 
+                for k, v in enumerate(tf.trainable_variables())]
  
+        tst = 0
+        with tf.variable_scope("means_sd", reuse=True) as scope:
+            trainable_test = [v for v in tf.trainable_variables()]
+            trains = [v for v in tf.trainable_variables()]
+            apply_ = []
+            for k in range(len(trains)):
+                #dist = tf.distributions.Normal(
+                #    loc=trains[k], scale=vars_[k])
+                dist = tf.distributions.Normal(
+                    loc=trains[k], scale=sds_[k])
+                dist_ = tf.reshape(dist.sample([1]), trains[k].shape)
+                new_trainable = dist_#tf.add(means_[k], dist_)
+                apply_.append(tf.assign(tf.trainable_variables()[k], new_trainable))
+            with tf.control_dependencies([op for op in apply_]):
+                tst += 1
+
+
+
 
         # Losses
         cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
@@ -379,6 +400,7 @@ class DenseNet:
         l2_loss = tf.add_n(
             [tf.nn.l2_loss(var) for var in tf.trainable_variables()])
 
+        #self.learning_rate = 1
         # optimizer and train step
         optimizer = tf.train.MomentumOptimizer(
             self.learning_rate, self.nesterov_momentum, use_nesterov=True)
@@ -396,43 +418,74 @@ class DenseNet:
             "No gradients provided for any variable, check your graph for ops"
             " that do not support gradients, between variables %s and loss %s." %
             ([str(v) for _, v in grads_and_vars], loss))
-        tst = 0
+
+        #tst = 0
         with tf.variable_scope("means_vars", reuse=True) as scope:
-            mean_tmp = [tf.get_variable("means_"+str(k)) for k in range(len(tf.trainable_variables()))]
-            var_tmp = [tf.get_variable("vars_"+str(k)) for k in range(len(tf.trainable_variables()))]
+            #mean_tmp = [tf.get_variable("means_"+str(k)) for k in range(len(tf.trainable_variables()))]
+            #var_tmp = [tf.get_variable("vars_"+str(k)) for k in range(len(tf.trainable_variables()))]
+            mean_tmp = []
+            var_tmp = []
             for k, (g, v) in enumerate(grads_and_vars):
-                mean_tmp[k] = tf.add(tf.multiply(tf.constant(
-                    self.alpha, dtype=tf.float32), g), means_[k]) 
+#                mean_tmp.append(tf.add(tf.multiply(tf.constant(
+#                    self.alpha, dtype=tf.float32), g), means_[k]))
+
+#                m_asn = tf.assign(means_[k], mean_tmp[k])
+#                mean_tmp = tf.add(tf.multiply(tf.constant(
+#                    self.alpha, dtype=tf.float32), g), means_[k])
+#                m_asn = tf.assign(means_[k], mean_tmp)
+
+                #tester = tf.add(tf.multiply(tf.constant(
+                #    0, dtype=tf.float32), g), means_[k])
+
+                #with tf.control_dependencies([check_op]):
+                #    print("We're good")
+                #var_tmp[k] = tf.abs(tf.multiply(tf.constant(
+                #    self.zeta, dtype=tf.float32), tf.add(
+                #    tf.multiply(tf.constant(self.beta,
+                #    dtype=tf.float32), g), vars_[k])))
     
-                var_tmp[k] = tf.abs(tf.multiply(tf.constant(
+                sd_tmp = tf.multiply(tf.constant(
                     self.zeta, dtype=tf.float32), tf.add(
-                    tf.multiply(tf.constant(self.beta,
-                    dtype=tf.float32), g), vars_[k])))
-    
-                mean_op = tf.assign(means_[k], mean_tmp[k])
-                var_op = tf.assign(vars_[k], var_tmp[k])
-                printer = tf.Print(mean_op, [mean_tmp[k]])
-                with tf.control_dependencies([mean_op, var_op]):
-                    #just to have something here in case the 
-                    #graph optimizes this away
-                    tst += k
-                    with tf.control_dependencies([printer]):
-                        tst *= k
+                    tf.abs(tf.multiply(tf.constant(self.beta,
+                    dtype=tf.float32), g)), sds_[k]))
+                sd_asn = tf.assign(sds_[k], sd_tmp)
+#                with tf.control_dependencies([m_asn, v_asn]):
+                with tf.control_dependencies([sd_asn]):
+                    #tester = tf.constant(20, dtype=tf.float32)
+                    tst += 1
+                    #self.check_op = tf.assert_equal(mean_tmp[k], tester)
+                    #with tf.control_dependencies([self.check_op]):
+                    #    print("we're good")                
+                #equal = [tf.assert_equal(tf.trainable_variables()[k], 
+                #    trainable_test[k]) for k in range(len(tf.trainable_variables()))]
+ 
+                #self.equal =  equal #tf.assert_equal(tf.trainable_variables(), trainable_test)
+               #mean_op = tf.assign(tf.get_variable("means_"+str(k)), mean_tmp[k])
+                #var_op = tf.assign(tf.get_variable("vars_"+str(k)), var_tmp[k])
+
+                #printer = tf.Print(mean_op, [mean_tmp[k]])
+                #with tf.control_dependencies([mean_op, var_op]):
+                #    #just to have something here in case the 
+                #    #graph optimizes this away
+                #    tst += k
+                #    with tf.control_dependencies([printer]):
+                #        tst *= k
 
         self.train_step = self.optimizer.apply_gradients(
             grads_and_vars)
+        #self.train_step = tf.add(1,2)
 
-        with tf.variable_scope("means_vars", reuse=True) as scope:
-            trains = [v for v in tf.trainable_variables()]
-            apply_ = []
-            for k in range(len(trains)):
-                dist = tf.distributions.Normal(
-                    loc=trains[k], scale=vars_[k])
-                dist_ = tf.reshape(dist.sample([1]), trains[k].shape)
-                new_trainable = tf.add(means_[k], dist_)
-                apply_.append(tf.assign(tf.trainable_variables()[k], new_trainable))
-            with tf.control_dependencies([op for op in apply_]):
-                tst += 1
+#        with tf.variable_scope("means_vars", reuse=True) as scope:
+#            trains = [v for v in tf.trainable_variables()]
+#            apply_ = []
+#            for k in range(len(trains)):
+#                dist = tf.distributions.Normal(
+#                    loc=trains[k], scale=vars_[k])
+#                dist_ = tf.reshape(dist.sample([1]), trains[k].shape)
+#                new_trainable = tf.add(means_[k], dist_)
+#                apply_.append(tf.assign(tf.trainable_variables()[k], new_trainable))
+#            with tf.control_dependencies([op for op in apply_]):
+#                tst += 1
 
         correct_prediction = tf.equal(
             tf.argmax(prediction, 1),
@@ -527,7 +580,9 @@ class DenseNet:
 #            }
 #            fetches = [self.train_step, self.cross_entropy, self.accuracy]
 #            result = self.sess.run(fetches, feed_dict=feed_dict)
-            result = self.sess.run([self.train_step, self.cross_entropy, self.accuracy])
+            sess_list = [self.train_step, self.cross_entropy, self.accuracy] #+ self.equal
+#            result = self.sess.run([self.train_step, self.equal, self.cross_entropy, self.accuracy])#, self.check_op])
+            result = self.sess.run(sess_list)
             _, loss, accuracy = result
             print("Iteration %d: loss=%f, accuracy=%f" % (i, loss, accuracy))
             total_loss.append(loss)
