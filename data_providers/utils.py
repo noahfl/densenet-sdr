@@ -6,8 +6,6 @@ from .svhn import SVHNDataProvider
 def get_data_provider_by_name(name, train_params):
     """Return required data provider class"""
     if name == 'C10':
-        print("-------")
-        print(train_params)
         return Cifar10DataProvider(**train_params)
     if name == 'C10+':
         return Cifar10AugmentedDataProvider(**train_params)

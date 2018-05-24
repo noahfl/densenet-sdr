@@ -80,9 +80,9 @@ class DenseNet:
         self.renew_logs = renew_logs
         self.batches_step = 0
         self.is_training = tf.constant(True, dtype=tf.bool)
-        self.alpha = 0.1
-        self.beta = 0.02
-        self.zeta = 0.2
+        self.alpha = 0.05
+        self.beta = 0.1
+        self.zeta = 0.001
         self._define_inputs()
 #        self._build_graph()
 #        self._initialize_session()
@@ -95,14 +95,18 @@ class DenseNet:
         config.gpu_options.allow_growth = True
         self.sess = tf.Session(config=config)
         tf_ver = int(tf.__version__.split('.')[1])
-        if TF_VERSION <= 0.10:
-            self.sess.run(tf.initialize_all_variables())
-            logswriter = tf.train.SummaryWriter
-        else:
-            self.sess.run(tf.global_variables_initializer())
-            logswriter = tf.summary.FileWriter
-        self.saver = tf.train.Saver()
-        self.summary_writer = logswriter(self.logs_path)
+
+        with tf.variable_scope("summaries"):
+    
+            if TF_VERSION <= 0.10:
+                self.sess.run(tf.initialize_all_variables())
+                logswriter = tf.train.SummaryWriter
+            else:
+                self.sess.run(tf.global_variables_initializer())
+                logswriter = tf.summary.FileWriter
+            self.saver = tf.train.Saver()
+            self.summary_writer = logswriter(self.logs_path)
+            self.summary_writer.add_graph(self.sess.graph)
 
     def _count_trainable_params(self):
         total_parameters = 0
@@ -156,16 +160,23 @@ class DenseNet:
 
     def log_loss_accuracy(self, loss, accuracy, epoch, prefix,
                           should_print=True):
-        if should_print:
-            print("mean cross_entropy: %f, mean accuracy: %f" % (
-                loss, accuracy))
-        summary = tf.Summary(value=[
-            tf.Summary.Value(
-                tag='loss_%s' % prefix, simple_value=float(loss)),
-            tf.Summary.Value(
-                tag='accuracy_%s' % prefix, simple_value=float(accuracy))
-        ])
-        self.summary_writer.add_summary(summary, epoch)
+        with tf.variable_scope("summaries"):
+
+            if should_print:
+                print("mean cross_entropy: %f, mean accuracy: %f" % (
+                    loss, accuracy))
+            summary = tf.Summary(value=[
+                tf.Summary.Value(
+                    tag='loss_%s' % prefix, simple_value=float(loss)),
+                tf.Summary.Value(
+                    tag='accuracy_%s' % prefix, simple_value=float(accuracy))
+            ])
+            self.summary_writer.add_summary(summary, epoch)
+
+    def add_histograms(self, tensor):
+        with tf.variable_scope("summaries"):
+            tf.summary.histogram(tensor.name + "_hist", tensor)
+            #self.summary_writer.add_summary(hist_summary)
 
     def _define_inputs(self):
         shape = [self.batch_size]
@@ -349,58 +360,85 @@ class DenseNet:
                 self.images,
                 out_features=self.first_output_features,
                 kernel_size=3)
-
+            tf.summary.histogram('pre_gradients_weights_' + output.name, output)
         # add N required blocks
         for block in range(self.total_blocks):
             with tf.variable_scope("Block_%d" % block):
                 output = self.add_block(output, growth_rate, layers_per_block)
+                tf.summary.histogram('pre_gradients_weights_' +
+                    output.name + str(block), output)
             # last block exist without transition layer
             if block != self.total_blocks - 1:
                 with tf.variable_scope("Transition_after_block_%d" % block):
                     output = self.transition_layer(output)
+                    tf.summary.histogram('pre_gradients_weights_' +
+                        output.name + str(block), output)
 
         with tf.variable_scope("Transition_to_classes"):
             logits = self.transition_layer_to_classes(output)
+            tf.summary.histogram('pre_gradients_weights_' + logits.name, logits)
+            self.add_histograms(logits)
+            
         prediction = tf.nn.softmax(logits)
 
-        with tf.variable_scope("means_sd") as scope:
+        tst = 0
+        with tf.variable_scope("means_sd") as m_sd:
 #            means_ = [tf.get_variable("means_" + str(k), initializer=tf.random_normal(
 #                v.shape), trainable=True) for k, v in enumerate(tf.trainable_variables())]
         
         #with tf.variable_scope("vars", reuse=tf.AUTO_REUSE):
-#            sds_ = [tf.get_variable("sds_" + str(k), initializer=tf.random_normal( 
-#                v.shape), trainable=False) for k, v in enumerate(tf.trainable_variables())]
-            sds_ = [tf.get_variable("sds_" + str(k), initializer=tf.constant(
-                2, dtype=tf.float32, shape=v.shape), trainable=False) 
+            sds_ = [tf.get_variable("sds_" + str(k),
+                initializer=tf.random_uniform(v.shape, minval=0, maxval=0), trainable=False)
                 for k, v in enumerate(tf.trainable_variables())]
+            #sds_ = [tf.get_variable("sds_" + str(k), initializer=tf.constant(
+            #    2, dtype=tf.float32, shape=v.shape), trainable=False) 
+            #    for k, v in enumerate(tf.trainable_variables())]
+            #tf.summary.histogram(sds_.name, sds_)
+            #for var in sds_:
+            #    tf.summary.histogram('sds_' + var.name, var)
  
-        tst = 0
-        with tf.variable_scope("means_sd", reuse=True) as scope:
             trainable_test = [v for v in tf.trainable_variables()]
             trains = [v for v in tf.trainable_variables()]
-            apply_ = []
+            #apply_ = []
+            self.apply_ = []
             for k in range(len(trains)):
                 #dist = tf.distributions.Normal(
                 #    loc=trains[k], scale=vars_[k])
                 dist = tf.distributions.Normal(
                     loc=trains[k], scale=sds_[k])
                 dist_ = tf.reshape(dist.sample([1]), trains[k].shape)
+                
+                
                 new_trainable = dist_#tf.add(means_[k], dist_)
-                apply_.append(tf.assign(tf.trainable_variables()[k], new_trainable))
-            with tf.control_dependencies([op for op in apply_]):
-                tst += 1
+                
+                self.apply_.append(tf.assign(tf.trainable_variables()[k], new_trainable))
+#                apply_.append(tf.assign(tf.trainable_variables()[k], 
+#                    tf.zeros(shape=tf.trainable_variables()[k].shape, dtype=tf.float32)))
 
+                #self.apply_.append(tf.assign(tf.trainable_variables()[k], 
+                #    tf.zeros(shape=tf.trainable_variables()[k].shape, dtype=tf.float32)))
 
+            #with tf.control_dependencies([op for op in apply_]):
+            #    tst += 1
 
+        #for var in tf.trainable_variables():
+        #    tf.summary.histogram('pre_gradients_weights_' + var.name, var)
+            
+        #with tf.variable_scope("summaries"):
+        #    hist_summary = tf.summary.histogram(tensor.name + "_hist", tensor)
+        #    self.summary_writer.add_summary(hist_summary)
 
         # Losses
         cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
             logits=logits, labels=self.labels))
         self.cross_entropy = cross_entropy
+#        l2_loss = tf.add_n(
+#            [tf.nn.l2_loss(var) for var in tf.trainable_variables()])
         l2_loss = tf.add_n(
             [tf.nn.l2_loss(var) for var in tf.trainable_variables()])
 
-        #self.learning_rate = 1
+
+        # self.learning_rate = 1
         # optimizer and train step
         optimizer = tf.train.MomentumOptimizer(
             self.learning_rate, self.nesterov_momentum, use_nesterov=True)
@@ -420,11 +458,12 @@ class DenseNet:
             ([str(v) for _, v in grads_and_vars], loss))
 
         #tst = 0
-        with tf.variable_scope("means_vars", reuse=True) as scope:
+        #with tf.variable_scope("means_sd", reuse=True) as scope:
+        with tf.variable_scope(m_sd.original_name_scope):
             #mean_tmp = [tf.get_variable("means_"+str(k)) for k in range(len(tf.trainable_variables()))]
             #var_tmp = [tf.get_variable("vars_"+str(k)) for k in range(len(tf.trainable_variables()))]
-            mean_tmp = []
-            var_tmp = []
+            #mean_tmp = []
+            #var_tmp = []
             for k, (g, v) in enumerate(grads_and_vars):
 #                mean_tmp.append(tf.add(tf.multiply(tf.constant(
 #                    self.alpha, dtype=tf.float32), g), means_[k]))
@@ -448,11 +487,11 @@ class DenseNet:
                     self.zeta, dtype=tf.float32), tf.add(
                     tf.abs(tf.multiply(tf.constant(self.beta,
                     dtype=tf.float32), g)), sds_[k]))
-                sd_asn = tf.assign(sds_[k], sd_tmp)
+                self.sd_asn = tf.assign(sds_[k], sd_tmp)
 #                with tf.control_dependencies([m_asn, v_asn]):
-                with tf.control_dependencies([sd_asn]):
+                #with tf.control_dependencies([sd_asn]):
                     #tester = tf.constant(20, dtype=tf.float32)
-                    tst += 1
+                #    tst += 1
                     #self.check_op = tf.assert_equal(mean_tmp[k], tester)
                     #with tf.control_dependencies([self.check_op]):
                     #    print("we're good")                
@@ -470,9 +509,17 @@ class DenseNet:
                 #    tst += k
                 #    with tf.control_dependencies([printer]):
                 #        tst *= k
-
+#            tf.summary.histogram('post_sdr_weights', tf.trainable_variables())
+            for var in tf.trainable_variables():
+                tf.summary.histogram('post_sdr_weights_' + var.name, var)
+            
         self.train_step = self.optimizer.apply_gradients(
             grads_and_vars)
+
+#        tf.summary.histogram('post_tf_gradients_weights', tf.trainable_variables())
+        #for var in tf.trainable_variables():
+        #    tf.summary.histogram('post_tf_gradients_weights_' + var.name, var)
+        self.summaries = tf.summary.merge_all()
         #self.train_step = tf.add(1,2)
 
 #        with tf.variable_scope("means_vars", reuse=True) as scope:
@@ -491,6 +538,7 @@ class DenseNet:
             tf.argmax(prediction, 1),
             tf.argmax(self.labels, 1))
         self.accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+        
 
     def input_pipeline(self, batch_size, data, test=False):
     
@@ -580,10 +628,16 @@ class DenseNet:
 #            }
 #            fetches = [self.train_step, self.cross_entropy, self.accuracy]
 #            result = self.sess.run(fetches, feed_dict=feed_dict)
-            sess_list = [self.train_step, self.cross_entropy, self.accuracy] #+ self.equal
+            
+            sess_list1 = self.apply_ + [self.sd_asn, self.train_step] #+ self.equal
+            sess_list2 = [self.cross_entropy, self.accuracy]
 #            result = self.sess.run([self.train_step, self.equal, self.cross_entropy, self.accuracy])#, self.check_op])
-            result = self.sess.run(sess_list)
-            _, loss, accuracy = result
+            result1 = self.sess.run(sess_list1)
+            result2 = self.sess.run(sess_list2)
+            if i % 100 == 0:
+                summ_ = self.sess.run(self.summaries)
+                self.summary_writer.add_summary(summ_)
+            loss, accuracy = result2
             print("Iteration %d: loss=%f, accuracy=%f" % (i, loss, accuracy))
             total_loss.append(loss)
             total_accuracy.append(accuracy)
@@ -607,6 +661,7 @@ class DenseNet:
             ####tf.global_variables(scope='Transition_to_classes')
         mean_loss = np.mean(total_loss)
         mean_accuracy = np.mean(total_accuracy)
+        #tf.summary.merge_all()
         return mean_loss, mean_accuracy
 
     def test(self, data, batch_size):
@@ -615,6 +670,7 @@ class DenseNet:
         total_accuracy = []
         images, labels = self.input_pipeline(batch_size,
             self.data_provider.test, test=True)
+        self.is_training = tf.constant(False, dtype=tf.bool)
         for i in range(num_examples // batch_size):
             #batch = data.next_batch(batch_size)
             #feed_dict = {
@@ -628,4 +684,6 @@ class DenseNet:
             total_accuracy.append(accuracy)
         mean_loss = np.mean(total_loss)
         mean_accuracy = np.mean(total_accuracy)
+        merged_summary = tf.summary.merge_all()
+         
         return mean_loss, mean_accuracy
