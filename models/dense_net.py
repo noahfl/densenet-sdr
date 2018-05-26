@@ -82,7 +82,7 @@ class DenseNet:
         self.is_training = tf.constant(True, dtype=tf.bool)
         self.alpha = 0.05
         self.beta = 0.1
-        self.zeta = 0.001
+        self.zeta = 0.01
         self._define_inputs()
 #        self._build_graph()
 #        self._initialize_session()
