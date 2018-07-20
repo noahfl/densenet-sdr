@@ -360,6 +360,55 @@ class DenseNet:
                 self.images,
                 out_features=self.first_output_features,
                 kernel_size=3)
+
+        # add N required blocks
+        for block in range(self.total_blocks):
+            with tf.variable_scope("Block_%d" % block):
+                output = self.add_block(output, growth_rate, layers_per_block)
+            # last block exist without transition layer
+            if block != self.total_blocks - 1:
+                with tf.variable_scope("Transition_after_block_%d" % block):
+                    output = self.transition_layer(output)
+
+        with tf.variable_scope("Transition_to_classes"):
+            logits = self.transition_layer_to_classes(output)
+        prediction = tf.nn.softmax(logits)
+
+
+
+        # Losses
+        cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
+            logits=logits, labels=self.labels))
+        self.cross_entropy = cross_entropy
+        l2_loss = tf.add_n(
+            [tf.nn.l2_loss(var) for var in tf.trainable_variables()])
+
+        # optimizer and train step
+        optimizer = tf.train.MomentumOptimizer(
+            self.learning_rate, self.nesterov_momentum, use_nesterov=True)
+        self.optimizer = optimizer
+        self.train_step = self.optimizer.minimize(
+            cross_entropy + l2_loss * self.weight_decay)
+
+        correct_prediction = tf.equal(
+            tf.argmax(prediction, 1),
+            tf.argmax(self.labels, 1))
+        self.accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+
+
+    def _build_graph_sdr(self, batch_size):
+        images, labels = self.input_pipeline(batch_size, self.data_provider.train)
+        self.images = tf.cast(images, tf.float32)
+        #self.sess.run(self.images)
+        self.labels = tf.cast(labels, tf.float32)
+        growth_rate = self.growth_rate
+        layers_per_block = self.layers_per_block
+        # first - initial 3 x 3 conv to first_output_features
+        with tf.variable_scope("Initial_convolution"):
+            output = self.conv2d(
+                self.images,
+                out_features=self.first_output_features,
+                kernel_size=3)
             tf.summary.histogram('pre_gradients_weights_' + output.name, output)
         # add N required blocks
         for block in range(self.total_blocks):
@@ -474,7 +523,10 @@ class DenseNet:
         reduce_lr_epoch_1 = train_params['reduce_lr_epoch_1']
         reduce_lr_epoch_2 = train_params['reduce_lr_epoch_2']
         total_start_time = time.time()
-        self._build_graph(batch_size)
+        if self.use_sdr:
+            self._build_graph_sdr(batch_size)
+        else:
+            self._build_graph(batch_size)
         self._initialize_session()
         self._count_trainable_params()
 
@@ -486,8 +538,13 @@ class DenseNet:
                 print("Decrease learning rate, new lr = %f" % learning_rate)
 
             print("Training...")
-            loss, acc = self.train_one_epoch(
-                self.data_provider.train, batch_size, learning_rate)
+            if self.use_sdr:
+                loss, acc = self.train_one_epoch_sdr(
+                    self.data_provider.train, batch_size, learning_rate)
+            else:
+                loss, acc = self.train_one_epoch(
+                    self.data_provider.train, batch_size, learning_rate)
+
             if self.should_save_logs:
                 self.log_loss_accuracy(loss, acc, epoch, prefix='train')
 
@@ -523,13 +580,40 @@ class DenseNet:
         self.is_training = tf.constant(True, dtype=tf.bool)
         
         for i in range(num_examples // batch_size):
+            result = self.sess.run([self.train_step, self.cross_entropy, self.accuracy])
+            _, loss, accuracy = result
+            print("Iteration %d: loss=%f, accuracy=%f" % (i, loss, accuracy))
+            total_loss.append(loss)
+            total_accuracy.append(accuracy)
+            if self.should_save_logs:
+                self.batches_step += 1
+                self.log_loss_accuracy(
+                    loss, accuracy, self.batches_step, prefix='per_batch',
+                    should_print=False)
+        mean_loss = np.mean(total_loss)
+        mean_accuracy = np.mean(total_accuracy)
+        return mean_loss, mean_accuracy
+
+
+    def train_one_epoch_sdr(self, data, batch_size, learning_rate):
+        coord = tf.train.Coordinator()
+        threads = tf.train.start_queue_runners(sess=self.sess, coord=coord)
+        #self.images = images
+        #self.labels = labels
+        num_examples = data.num_examples
+        self.learning_rate = learning_rate
+        total_loss = []
+        total_accuracy = []
+        self.is_training = tf.constant(True, dtype=tf.bool)
+        
+        for i in range(num_examples // batch_size):
             
             sess_list1 = self.apply_ + self.sd_asn + [self.train_step] #+ self.equal
             sess_list2 = [self.cross_entropy, self.accuracy]
             result1 = self.sess.run(sess_list1)
             result2 = self.sess.run(sess_list2)
             #batch size, don't hard code this
-            if i % 147 == 0:
+            if i % (num_examples // batch_size) - 1 == 0:
                 summ_ = self.sess.run(self.summaries)
                 self.summary_writer.add_summary(summ_)
             loss, accuracy = result2

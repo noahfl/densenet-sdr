@@ -82,6 +82,8 @@ class SVHNDataProvider(DataProvider):
         self.batch_size = kwargs['batch_size']
         train_images = []
         train_labels = []
+        self.use_sdr = kwargs['use_sdr']
+
         for part in ['train', 'extra']:
             images, labels = self.get_images_and_labels(part, one_hot)
             train_images.append(images)

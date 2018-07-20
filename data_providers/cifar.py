@@ -137,6 +137,7 @@ class CifarDataProvider(DataProvider):
         self.one_hot = one_hot
         download_data_url(self.data_url, self.save_path)
         train_fnames, test_fnames = self.get_filenames(self.save_path)
+        self.use_sdr = kwargs['use_sdr']
 
         # add train and validations datasets
         images, labels = self.read_cifar(train_fnames)
