@@ -1,9 +1,9 @@
 Stochastic Delta Rule implemtation using DenseNet with TensorFlow
-~~~~~~~~~~~~~~~~~~~~~~~~
+-----------------------------------------------------------------
 
 *NOTE* This is repository is based off of [Illarion Khlestov's DenseNet implementation](https://github.com/ikhlestov/vision_networks/ "ikhlestov/vision_networks/"). Check out his blog post about implementing DenseNet in TensorFlow [here](https://medium.com/@illarionkhlestov/notes-on-the-implementation-densenet-in-tensorflow-beeda9dd1504#.55qu3tfqm).
 
-~~~~~~~~~~~~~~~~~~~~~~~~
+
 
 This repository holds the code for the paper 
 
@@ -61,12 +61,10 @@ Test run
 
 Test results on various datasets. Image normalization per channels was used. Results reported in paper provided in parenthesis. For Cifar+ datasets image normalization was performed before augmentation. This may cause a little bit lower results than reported in paper.
 
-====================== ====== =========== =========== ============== ==============
-Model type             Depth  C10          C10+       C100           C100+
-====================== ====== =========== =========== ============== ==============
-DenseNet(*k* = 12)     40     6.67(7.00)  5.44(5.24)  27.44(27.55)   25.62(24.42)
-DenseNet-BC(*k* = 12)  100    5.54(5.92)  4.87(4.51)  24.88(24.15)   22.85(22.27)
-====================== ====== =========== =========== ============== ==============
+|Model type            |Depth  |C10         |C10+       |C100          |C100+       |
+|:---------------------|:------|:-----------|:----------|:-------------|:-----------|
+|DenseNet(*k* = 12)    |40     |6.67(7.00)  |5.44(5.24) |27.44(27.55)  |25.62(24.42)|
+|DenseNet-BC(*k* = 12) |100    |5.54(5.92)  |4.87(4.51) |24.88(24.15)  |22.85(22.27)|
 
 
 Difference compared to the [original](https://github.com/liuzhuang13/DenseNet) implementation
