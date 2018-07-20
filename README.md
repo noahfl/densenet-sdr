@@ -1,8 +1,9 @@
-Stochastic Delta Rule implemtation using DenseNet with TensorFlow
------------------------------------------------------------------
+#Stochastic Delta Rule implemtation using DenseNet  TensorFlow
 
-*NOTE* This is repository is based off of [Illarion Khlestov's DenseNet implementation](https://github.com/ikhlestov/vision_networks/ "ikhlestov/vision_networks/"). Check out his blog post about implementing DenseNet in TensorFlow [here](https://medium.com/@illarionkhlestov/notes-on-the-implementation-densenet-in-tensorflow-beeda9dd1504#.55qu3tfqm).
+**NOTE** This is repository is based off of [Illarion Khlestov's DenseNet implementation](https://github.com/ikhlestov/vision_networks/ "ikhlestov/vision_networks/"). Check out his blog post about implementing DenseNet in TensorFlow [here](https://medium.com/@illarionkhlestov/notes-on-the-implementation-densenet-in-tensorflow-beeda9dd1504#.55qu3tfqm).
 
+
+---------------------------------------------------------------------------------------
 
 
 This repository holds the code for the paper 
@@ -11,7 +12,7 @@ Dropout is a special case of the stochastic delta rule: faster and more accurate
 
 [Noah Frazier-Logue](https://www.linkedin.com/in/noah-frazier-logue-1524b796/), [Stephen Jose Hanson](http://nwkpsych.rutgers.edu/~jose/)
 
-Stochastic Delta Rule is a weight update mechanism that assigns to each weight a standard deviation that changes as a function of the gradients every training iteration. At the beginning of each training iteration, the weights are re-initialized using a normal distribution bound by their standard deviations. Over the course of the training iterations and epochs, the standard deviations converge towards zero as the network becomes more sure of what the values of each of the weights should be. For a more detailed description of the method and its properties, have a look at the paper [link here].
+Stochastic Delta Rule (SDR) is a weight update mechanism that assigns to each weight a standard deviation that changes as a function of the gradients every training iteration. At the beginning of each training iteration, the weights are re-initialized using a normal distribution bound by their standard deviations. Over the course of the training iterations and epochs, the standard deviations converge towards zero as the network becomes more sure of what the values of each of the weights should be. For a more detailed description of the method and its properties, have a look at the paper [link here].
 
 
 
@@ -30,11 +31,30 @@ Each model can be tested on such datasets:
 
 A number of layers, blocks, growth rate, image normalization and other training params may be changed trough shell or inside the source code.
 
+##Usage
+
 Example run:
 
 ```
-    python run_dense_net.py --train --test --dataset=C10
+    python run_dense_net.py --depth=40 --train --test --dataset=C10 --sdr
 ```
+
+This run uses SDR instead of dropout. To use dropout, run something like
+
+```
+    python run_dense_net.py --depth=40 --train --test --dataset=C10 --keep_prob=0.8
+```
+
+where `keep_prob` is the probability (in this case 80%) that a neuron is *kept* during dropout.
+
+**NOTE:** the `--sdr`` argument will override the `--keep_prob` argument. For example:
+
+```
+    python run_dense_net.py --depth=40 --train --test --dataset=C10 --keep_prob=0.8 --sdr
+```
+
+will use SDR and not dropout.
+
 
 List all available options:
 
@@ -42,7 +62,7 @@ List all available options:
     python run_dense_net.py --help
 ```
 
-There are also many [other implementations](https://github.com/liuzhuang13/DenseNet) - they may be useful also.
+There are also many [other implementations](https://github.com/liuzhuang13/DenseNet) - they may be useful.
 
 Citation:
 
@@ -54,9 +74,46 @@ Citation:
             year = {2016}
      }
 ```
+##Results from SDR paper
+
+This table shows the results on CIFAR shown in the paper. Parameters are all the same as what are used in the paper, except for a batch size of 100 and an epoch size of 100. SDR's beta value was 0.1 and zeta was 0.01. The augmented datasets were not tested on because dropout was not used on these datasets in the original paper, however they may be added in the future (as will the SVHN results and results with higher layer counts).
+
+|Model type            |Depth  |C10              |C100              |
+|:---------------------|:------|:----------------|:-----------------|
+|DenseNet(*k* = 12)    |40     |2.256(5.160)     |09.36(22.60)      |
+|DenseNet(*k* = 12)    |100    |**1.360**(3.820) |**05.16**(11.06)  |
+|DenseNet-BC(*k* = 12) |100    |2.520(6.340)     |11.12(25.08)      |
 
 
-Test run
+
+###Epochs to accuracy
+
+The below tables show the number of training epochs required to reach a training error of 15, 10, and 5, respectively. For example, the dropout version of DenseNet-40 on CIFAR-10 took 8 epochs to reach a training error of 15, 16 epochs to reach a training error of 10, and 94 epochs to reach a training error of 5. In contrast, the SDR version of DenseNet-40 on CIFAR-10 took 5 epochs to reach a training error of 15, 5 epochs to reach a training error of 10, and 15 epochs to reach a training error of 5.
+
+
+####Dropout 
+
+|Model type            |Depth  |C10             |C100             |
+|:---------------------|:------|:---------------|:----------------|
+|DenseNet(*k* = 12)    |40     |8 \ 16 \ 94     |95 \ -- \ --     |
+|                      |       |                |                 |
+|DenseNet(*k* = 12)    |100    |8 \ 13 \ 25     |28 \ 60 \ --     |
+|                      |       |                |                 |
+|DenseNet-BC(*k* = 12) |100    |10 \ 25 \ --    |-- \ -- \ --     |
+|                      |       |                |                 |
+
+####SDR
+
+|Model type            |Depth  |C10                     |C100                       |
+|:---------------------|:------|:-----------------------|:--------------------------|
+|DenseNet(*k* = 12)    |40     |**5** \  **8** \ **15** |27 \ 48 \ --               |
+|                      |       |                        |                           |
+|DenseNet(*k* = 12)    |100    |6 \ 9  \ **15**         |**17** \ **21** \ **52**   |
+|                      |       |                        |                           |
+|DenseNet-BC(*k* = 12) |100    |**5**  \ **8**  \ 17    |31 \ 87 \ --               |
+|                      |       |                        |                           |
+
+Comparison to original DenseNet implementation with dropout
 --------
 
 Test results on various datasets. Image normalization per channels was used. Results reported in paper provided in parenthesis. For Cifar+ datasets image normalization was performed before augmentation. This may cause a little bit lower results than reported in paper.
