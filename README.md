@@ -1,4 +1,4 @@
-#Stochastic Delta Rule implemtation using DenseNet  TensorFlow
+# Stochastic Delta Rule implemtation using DenseNet  TensorFlow
 
 **NOTE** This is repository is based off of [Illarion Khlestov's DenseNet implementation](https://github.com/ikhlestov/vision_networks/ "ikhlestov/vision_networks/"). Check out his blog post about implementing DenseNet in TensorFlow [here](https://medium.com/@illarionkhlestov/notes-on-the-implementation-densenet-in-tensorflow-beeda9dd1504#.55qu3tfqm).
 
@@ -31,7 +31,7 @@ Each model can be tested on such datasets:
 
 A number of layers, blocks, growth rate, image normalization and other training params may be changed trough shell or inside the source code.
 
-##Usage
+## Usage
 
 Example run:
 
@@ -74,7 +74,7 @@ Citation:
             year = {2016}
      }
 ```
-##Results from SDR paper
+## Results from SDR paper
 
 This table shows the results on CIFAR shown in the paper. Parameters are all the same as what are used in the paper, except for a batch size of 100 and an epoch size of 100. SDR's beta value was 0.1 and zeta was 0.01. The augmented datasets were not tested on because dropout was not used on these datasets in the original paper, however they may be added in the future (as will the SVHN results and results with higher layer counts).
 
@@ -86,12 +86,12 @@ This table shows the results on CIFAR shown in the paper. Parameters are all the
 
 
 
-###Epochs to accuracy
+### Epochs to accuracy
 
-The below tables show the number of training epochs required to reach a training error of 15, 10, and 5, respectively. For example, the dropout version of DenseNet-40 on CIFAR-10 took 8 epochs to reach a training error of 15, 16 epochs to reach a training error of 10, and 94 epochs to reach a training error of 5. In contrast, the SDR version of DenseNet-40 on CIFAR-10 took 5 epochs to reach a training error of 15, 5 epochs to reach a training error of 10, and 15 epochs to reach a training error of 5.
+The below tables show the number of training epochs required to reach a training error of 15, 10, and 5, respectively. For example, the dropout version of DenseNet-40 on CIFAR-10 took 8 epochs to reach a training error of 15, 16 epochs to reach a training error of 10, and 94 epochs to reach a training error of 5. In contrast, the SDR version of DenseNet-40 on CIFAR-10 took 5 epochs to reach a training error of 15, 5 epochs to reach a training error of 10, and 15 epochs to reach a training error of 5. Best results for each value, across both dropout and SDR, are bolded.
 
 
-####Dropout 
+#### Dropout 
 
 |Model type            |Depth  |C10             |C100             |
 |:---------------------|:------|:---------------|:----------------|
@@ -102,7 +102,7 @@ The below tables show the number of training epochs required to reach a training
 |DenseNet-BC(*k* = 12) |100    |10 \ 25 \ --    |-- \ -- \ --     |
 |                      |       |                |                 |
 
-####SDR
+#### SDR
 
 |Model type            |Depth  |C10                     |C100                       |
 |:---------------------|:------|:-----------------------|:--------------------------|
