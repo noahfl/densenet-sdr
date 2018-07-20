@@ -74,6 +74,14 @@ Citation:
             year = {2016}
      }
 ```
+
+**KNOWN ISSUES**
+
+ - model will not save due to graph definiton being larger than 2GB
+
+If you see anything wrong, feel free to open an issue!
+
+
 ## Results from SDR paper
 
 This table shows the results on CIFAR shown in the paper. Parameters are all the same as what are used in the paper, except for a batch size of 100 and an epoch size of 100. SDR's beta value was 0.1 and zeta was 0.01. The augmented datasets were not tested on because dropout was not used on these datasets in the original paper, however they may be added in the future (as will the SVHN results and results with higher layer counts).
@@ -126,7 +134,7 @@ Test results on various datasets. Image normalization per channels was used. Res
 
 Difference compared to the [original](https://github.com/liuzhuang13/DenseNet) implementation
 ---------------------------------------------------------
-The existing model should use identical hyperparameters to the original code. If you note some errors - please open an issue.
+The existing model should use identical hyperparameters to the original code.
 
 Dependencies
 ------------
