@@ -83,6 +83,7 @@ class DenseNet:
         self.alpha = 0.05
         self.beta = 0.1
         self.zeta = 0.01
+        self.use_sdr = kwargs['use_sdr']
         self._define_inputs()
 #        self._build_graph()
 #        self._initialize_session()
@@ -134,7 +135,8 @@ class DenseNet:
         try:
             logs_path = self._logs_path
         except AttributeError:
-            logs_path = 'logs/%s' % self.model_identifier
+            current_time = time.strftime("%Y_%m_%d_%H%M%S", time.gmtime())
+            logs_path = 'logs/%s/%s' % (self.model_identifier, current_time)
             if self.renew_logs:
                 shutil.rmtree(logs_path, ignore_errors=True)
             os.makedirs(logs_path, exist_ok=True)
@@ -143,7 +145,11 @@ class DenseNet:
 
     @property
     def model_identifier(self):
-        return "{}_growth_rate={}_depth={}_dataset_{}".format(
+        if self.use_sdr:
+            return "{}-SDR_growth_rate={}_depth={}_dataset_{}".format(
+            self.model_type, self.growth_rate, self.depth, self.dataset_name)
+        else:
+            return "{}_growth_rate={}_depth={}_dataset_{}".format(
             self.model_type, self.growth_rate, self.depth, self.dataset_name)
 
     def save_model(self, global_step=None):
@@ -176,7 +182,6 @@ class DenseNet:
     def add_histograms(self, tensor):
         with tf.variable_scope("summaries"):
             tf.summary.histogram(tensor.name + "_hist", tensor)
-            #self.summary_writer.add_summary(hist_summary)
 
     def _define_inputs(self):
         shape = [self.batch_size]
@@ -571,8 +576,6 @@ class DenseNet:
     def train_one_epoch(self, data, batch_size, learning_rate):
         coord = tf.train.Coordinator()
         threads = tf.train.start_queue_runners(sess=self.sess, coord=coord)
-        #self.images = images
-        #self.labels = labels
         num_examples = data.num_examples
         self.learning_rate = learning_rate
         total_loss = []
@@ -598,8 +601,6 @@ class DenseNet:
     def train_one_epoch_sdr(self, data, batch_size, learning_rate):
         coord = tf.train.Coordinator()
         threads = tf.train.start_queue_runners(sess=self.sess, coord=coord)
-        #self.images = images
-        #self.labels = labels
         num_examples = data.num_examples
         self.learning_rate = learning_rate
         total_loss = []
@@ -612,7 +613,7 @@ class DenseNet:
             sess_list2 = [self.cross_entropy, self.accuracy]
             result1 = self.sess.run(sess_list1)
             result2 = self.sess.run(sess_list2)
-            #batch size, don't hard code this
+            #record histograms, etc. every epoch
             if i % (num_examples // batch_size) - 1 == 0:
                 summ_ = self.sess.run(self.summaries)
                 self.summary_writer.add_summary(summ_)
@@ -628,7 +629,6 @@ class DenseNet:
 
         mean_loss = np.mean(total_loss)
         mean_accuracy = np.mean(total_accuracy)
-        #tf.summary.merge_all()
         return mean_loss, mean_accuracy
 
     def test(self, data, batch_size):
@@ -644,13 +644,4 @@ class DenseNet:
             total_accuracy.append(accuracy)
         mean_loss = np.mean(total_loss)
         mean_accuracy = np.mean(total_accuracy)
-        #report = np.array(["Test loss = "+ str(mean_loss),
-        #    "Test accuracy = " + str(mean_accuracy)])
-        #report_tensor = tf.constant(report)
-        #test_summary_op = tf.summary.text("test mean/loss", report_tensor)
-        #summ = self.sess.run(test_summary_op)
-        #self.summary_writer.add_summary(summ)
-        #merged_summary = tf.summary.merge_all()
-        #summ = self.sess.run(test_summary_op)
-        #self.summary_writer.add_summary(summ) 
         return mean_loss, mean_accuracy
