@@ -1,4 +1,4 @@
-# Stochastic Delta Rule implemtation using DenseNet  TensorFlow
+# Stochastic Delta Rule implemtation using DenseNet in TensorFlow
 
 **NOTE** This is repository is based off of [Illarion Khlestov's DenseNet implementation](https://github.com/ikhlestov/vision_networks/ "ikhlestov/vision_networks/"). Check out his blog post about implementing DenseNet in TensorFlow [here](https://medium.com/@illarionkhlestov/notes-on-the-implementation-densenet-in-tensorflow-beeda9dd1504#.55qu3tfqm).
 
@@ -8,7 +8,7 @@
 
 This repository holds the code for the paper 
 
-Dropout is a special case of the stochastic delta rule: faster and more accurate deep learning (submitted to NIPS)
+'Dropout is a special case of the stochastic delta rule: faster and more accurate deep learning' (submitted to NIPS)
 
 [Noah Frazier-Logue](https://www.linkedin.com/in/noah-frazier-logue-1524b796/), [Stephen Jose Hanson](http://nwkpsych.rutgers.edu/~jose/)
 
@@ -47,7 +47,7 @@ This run uses SDR instead of dropout. To use dropout, run something like
 
 where `keep_prob` is the probability (in this case 80%) that a neuron is *kept* during dropout.
 
-**NOTE:** the `--sdr`` argument will override the `--keep_prob` argument. For example:
+**NOTE:** the `--sdr` argument will override the `--keep_prob` argument. For example:
 
 ```
     python run_dense_net.py --depth=40 --train --test --dataset=C10 --keep_prob=0.8 --sdr
@@ -86,7 +86,7 @@ This table shows the results on CIFAR shown in the paper. Parameters are all the
 
 
 
-### Epochs to accuracy
+### Epochs to error rate
 
 The below tables show the number of training epochs required to reach a training error of 15, 10, and 5, respectively. For example, the dropout version of DenseNet-40 on CIFAR-10 took 8 epochs to reach a training error of 15, 16 epochs to reach a training error of 10, and 94 epochs to reach a training error of 5. In contrast, the SDR version of DenseNet-40 on CIFAR-10 took 5 epochs to reach a training error of 15, 5 epochs to reach a training error of 10, and 15 epochs to reach a training error of 5. Best results for each value, across both dropout and SDR, are bolded.
 
