@@ -634,9 +634,9 @@ class DenseNet:
     def test(self, data, batch_size):
         coord = tf.train.Coordinator()
         threads = tf.train.start_queue_runners(sess=self.sess, coord=coord)
-        print("Length of set: " + str(num_examples))
 
         num_examples = data.num_examples
+        print("Length of set: " + str(num_examples))
         total_loss = []
         total_accuracy = []
 
