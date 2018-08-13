@@ -636,12 +636,21 @@ class DenseNet:
         total_loss = []
         total_accuracy = []
         images, labels = self.input_pipeline(batch_size,
-            self.data_provider.test, test=True)
+            data, test=True)
+        print("Length of set:")
+        print(data.num_examples)
         self.is_training = tf.constant(False, dtype=tf.bool)
+        train_images = self.images
+        train_labels = self.labels
+        self.images = tf.cast(images, tf.float32)
+        self.labels = tf.cast(labels, tf.float32)
         for i in range(num_examples // batch_size):
             loss, accuracy = self.sess.run([self.cross_entropy, self.accuracy])
             total_loss.append(loss)
             total_accuracy.append(accuracy)
         mean_loss = np.mean(total_loss)
         mean_accuracy = np.mean(total_accuracy)
+        self.images = train_images
+        self.labels = train_labels
+        self.is_training = tf.constant(False, dtype=tf.bool)
         return mean_loss, mean_accuracy
