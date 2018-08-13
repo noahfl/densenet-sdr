@@ -634,13 +634,14 @@ class DenseNet:
     def test(self, data, batch_size):
         coord = tf.train.Coordinator()
         threads = tf.train.start_queue_runners(sess=self.sess, coord=coord)
+        print("Length of set: " + str(num_examples))
+
         num_examples = data.num_examples
         total_loss = []
         total_accuracy = []
+
         images, labels = self.input_pipeline(batch_size,
             data, test=True)
-        print("Length of set:")
-        print(num_examples)
         self.is_training = tf.constant(False, dtype=tf.bool)
         train_images = self.images
         train_labels = self.labels
