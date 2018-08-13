@@ -632,13 +632,15 @@ class DenseNet:
         return mean_loss, mean_accuracy
 
     def test(self, data, batch_size):
+        coord = tf.train.Coordinator()
+        threads = tf.train.start_queue_runners(sess=self.sess, coord=coord)
         num_examples = data.num_examples
         total_loss = []
         total_accuracy = []
         images, labels = self.input_pipeline(batch_size,
             data, test=True)
         print("Length of set:")
-        print(data.num_examples)
+        print(num_examples)
         self.is_training = tf.constant(False, dtype=tf.bool)
         train_images = self.images
         train_labels = self.labels
@@ -652,5 +654,5 @@ class DenseNet:
         mean_accuracy = np.mean(total_accuracy)
         self.images = train_images
         self.labels = train_labels
-        self.is_training = tf.constant(False, dtype=tf.bool)
+        self.is_training = tf.constant(True, dtype=tf.bool)
         return mean_loss, mean_accuracy
