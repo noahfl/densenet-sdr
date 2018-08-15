@@ -6,6 +6,19 @@
 ---------------------------------------------------------------------------------------
 
 
+Check out @lifeiteng's [results from implementing SDR with WaveNet](https://twitter.com/FeitengLi/status/1029166830844227584).
+
+
+**UPDATE**: Due to a bug found by @basveeling which has now been corrected, the testing errors are being recalculated. Here are the preliminary results, which I will continue to update as the results come out. "-----" indicates results that have not yet been redone.
+
+|Model type            |Depth  |C10              |C100              |
+|:---------------------|:------|:----------------|:-----------------|
+|DenseNet(*k* = 12)    |40     |1.860(5.080)     |09.96(22.43)      |
+|DenseNet(*k* = 12)    |100    |**1.220**(-----) |**-----**(-----)  |
+|DenseNet-BC(*k* = 12) |100    |-----(-----)     |-----(-----)      |
+
+
+
 This repository holds the code for the paper 
 
 'Dropout is a special case of the stochastic delta rule: faster and more accurate deep learning' (submitted to NIPS; soon to appear on arXiv)

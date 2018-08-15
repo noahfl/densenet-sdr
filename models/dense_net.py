@@ -473,7 +473,7 @@ class DenseNet:
           raise ValueError(
             "No gradients provided for any variable, check your graph for ops"
             " that do not support gradients, between variables %s and loss %s." %
-            ([str(v) for _, v in grads_and_vars], loss))
+            ([str(v) for _, v in grads_and_vars], l2_loss))
 
         self.sd_asn = []
         with tf.variable_scope(m_sd.original_name_scope):
@@ -632,14 +632,6 @@ class DenseNet:
         return mean_loss, mean_accuracy
 
     def test(self, data, batch_size):
-        coord = tf.train.Coordinator()
-        threads = tf.train.start_queue_runners(sess=self.sess, coord=coord)
-
-        num_examples = data.num_examples
-        print("Length of set: " + str(num_examples))
-        total_loss = []
-        total_accuracy = []
-
         images, labels = self.input_pipeline(batch_size,
             data, test=True)
         self.is_training = tf.constant(False, dtype=tf.bool)
@@ -647,6 +639,13 @@ class DenseNet:
         train_labels = self.labels
         self.images = tf.cast(images, tf.float32)
         self.labels = tf.cast(labels, tf.float32)
+
+        coord = tf.train.Coordinator()
+        threads = tf.train.start_queue_runners(sess=self.sess, coord=coord)
+
+        num_examples = data.num_examples
+        total_loss = []
+        total_accuracy = []
         for i in range(num_examples // batch_size):
             loss, accuracy = self.sess.run([self.cross_entropy, self.accuracy])
             total_loss.append(loss)
@@ -655,5 +654,4 @@ class DenseNet:
         mean_accuracy = np.mean(total_accuracy)
         self.images = train_images
         self.labels = train_labels
-        self.is_training = tf.constant(True, dtype=tf.bool)
         return mean_loss, mean_accuracy
