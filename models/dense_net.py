@@ -12,7 +12,7 @@ TF_VERSION = float('.'.join(tf.__version__.split('.')[:2]))
 
 class DenseNet:
     def __init__(self, data_provider, growth_rate, depth,
-                 total_blocks, keep_prob,
+                 total_blocks, keep_prob, num_inter_threads, num_intra_threads,
                  weight_decay, nesterov_momentum, model_type, dataset,
                  should_save_logs, should_save_model,
                  renew_logs=False,
@@ -50,6 +50,8 @@ class DenseNet:
         self.n_classes = data_provider.n_classes
         self.depth = depth
         self.growth_rate = growth_rate
+        self.num_inter_threads = num_inter_threads
+        self.num_intra_threads = num_intra_threads
         # how many features will be received after first convolution
         # value the same as in the original Torch code
         self.first_output_features = growth_rate * 2
@@ -79,19 +81,27 @@ class DenseNet:
         self.should_save_model = should_save_model
         self.renew_logs = renew_logs
         self.batches_step = 0
-        self.is_training = tf.constant(True, dtype=tf.bool)
-        self.alpha = 0.05
+        #self.alpha = 0.05
         self.beta = 0.1
         self.zeta = 0.01
         self.use_sdr = kwargs['use_sdr']
+        self.no_histograms = kwargs['no_histograms']
         self._define_inputs()
-#        self._build_graph()
-#        self._initialize_session()
-#        self._count_trainable_params()
+        if self.use_sdr:
+            self._build_graph_sdr()
+        else:
+            self._build_graph()
+        self._initialize_session()
+        self._count_trainable_params()
 
     def _initialize_session(self):
         """Initialize session, variables, saver"""
         config = tf.ConfigProto()
+
+        # Specify the CPU inter and Intra threads used by MKL
+        config.intra_op_parallelism_threads = self.num_intra_threads
+        config.inter_op_parallelism_threads = self.num_inter_threads
+
         # restrict model GPU memory utilization to min required
         config.gpu_options.allow_growth = True
         self.sess = tf.Session(config=config)
@@ -183,33 +193,51 @@ class DenseNet:
         with tf.variable_scope("summaries"):
             tf.summary.histogram(tensor.name + "_hist", tensor)
 
+
     def _define_inputs(self):
-        shape = [self.batch_size]
+        shape = [None]
         shape.extend(self.data_shape)
+        self.images = tf.placeholder(
+            tf.float32,
+            shape=shape,
+            name='input_images')
+        self.labels = tf.placeholder(
+            tf.float32,
+            shape=[None, self.n_classes],
+            name='labels')
+        self.learning_rate = tf.placeholder(
+            tf.float32,
+            shape=[],
+            name='learning_rate')
+        self.is_training = tf.placeholder(tf.bool, shape=[])
 
-        self.images = tf.get_variable('input_images',
-            shape=shape, initializer=tf.zeros_initializer(dtype=tf.float32))
+    #def _define_inputs(self):
+    #    shape = [self.batch_size]
+    #    shape.extend(self.data_shape)
 
-        #self.images = tf.placeholder(
-        #    tf.float32,
-        #    shape=shape,
-        #    name='input_images')
-        #self.labels = tf.placeholder(
-        #    tf.float32,
-        #    shape=[None, self.n_classes],
-        #    name='labels')
-        #labels_zeros = tf.zeros([None, self.n_classes], dtype=tf.float32)
-        self.labels = tf.get_variable('labels',
-            shape=[self.batch_size, self.n_classes],
-            initializer=tf.zeros_initializer(dtype=tf.float32))
+    #    self.images = tf.get_variable('input_images',
+    #        shape=shape, initializer=tf.zeros_initializer(dtype=tf.float32))
 
-        self.learning_rate = tf.constant(0.1, dtype=tf.float32)
-        #self.learning_rate = tf.placeholder(
-        #    tf.float32,
-        #    shape=[],
-        #    name='learning_rate')
-        #self.is_training = tf.placeholder(tf.bool, shape=[])
-        #tf.assign(self.is_training, True)
+    #    #self.images = tf.placeholder(
+    #    #    tf.float32,
+    #    #    shape=shape,
+    #    #    name='input_images')
+    #    #self.labels = tf.placeholder(
+    #    #    tf.float32,
+    #    #    shape=[None, self.n_classes],
+    #    #    name='labels')
+    #    #labels_zeros = tf.zeros([None, self.n_classes], dtype=tf.float32)
+    #    self.labels = tf.get_variable('labels',
+    #        shape=[self.batch_size, self.n_classes],
+    #        initializer=tf.zeros_initializer(dtype=tf.float32))
+
+    #    self.learning_rate = tf.constant(0.1, dtype=tf.float32)
+    #    #self.learning_rate = tf.placeholder(
+    #    #    tf.float32,
+    #    #    shape=[],
+    #    #    name='learning_rate')
+    #    #self.is_training = tf.placeholder(tf.bool, shape=[])
+    #    #tf.assign(self.is_training, True)
 
     def composite_function(self, _input, out_features, kernel_size=3):
         """Function from paper H_l that performs:
@@ -352,11 +380,7 @@ class DenseNet:
         initial = tf.constant(0.0, shape=shape)
         return tf.get_variable(name, initializer=initial)
 
-    def _build_graph(self, batch_size):
-        images, labels = self.input_pipeline(batch_size, self.data_provider.train)
-        self.images = tf.cast(images, tf.float32)
-        #self.sess.run(self.images)
-        self.labels = tf.cast(labels, tf.float32)
+    def _build_graph(self):
         growth_rate = self.growth_rate
         layers_per_block = self.layers_per_block
         # first - initial 3 x 3 conv to first_output_features
@@ -401,11 +425,7 @@ class DenseNet:
         self.accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
 
-    def _build_graph_sdr(self, batch_size):
-        images, labels = self.input_pipeline(batch_size, self.data_provider.train)
-        self.images = tf.cast(images, tf.float32)
-        #self.sess.run(self.images)
-        self.labels = tf.cast(labels, tf.float32)
+    def _build_graph_sdr(self):
         growth_rate = self.growth_rate
         layers_per_block = self.layers_per_block
         # first - initial 3 x 3 conv to first_output_features
@@ -435,7 +455,6 @@ class DenseNet:
             
         prediction = tf.nn.softmax(logits)
 
-        tst = 0
         with tf.variable_scope("means_sd") as m_sd:
             sds_ = [tf.get_variable("sds_" + str(k),
                 initializer=tf.random_uniform(v.shape, minval=0, maxval=0), trainable=False)
@@ -528,10 +547,6 @@ class DenseNet:
         reduce_lr_epoch_1 = train_params['reduce_lr_epoch_1']
         reduce_lr_epoch_2 = train_params['reduce_lr_epoch_2']
         total_start_time = time.time()
-        if self.use_sdr:
-            self._build_graph_sdr(batch_size)
-        else:
-            self._build_graph(batch_size)
         self._initialize_session()
         self._count_trainable_params()
 
@@ -574,18 +589,22 @@ class DenseNet:
             seconds=total_training_time)))
 
     def train_one_epoch(self, data, batch_size, learning_rate):
-        coord = tf.train.Coordinator()
-        threads = tf.train.start_queue_runners(sess=self.sess, coord=coord)
         num_examples = data.num_examples
-        self.learning_rate = learning_rate
         total_loss = []
         total_accuracy = []
-        self.is_training = tf.constant(True, dtype=tf.bool)
-        
+       
         for i in range(num_examples // batch_size):
-            result = self.sess.run([self.train_step, self.cross_entropy, self.accuracy])
+            batch = data.next_batch(batch_size)
+            images, labels = batch
+            feed_dict = {
+                self.images: images,
+                self.labels: labels,
+                self.learning_rate: learning_rate,
+                self.is_training: True,
+            }
+            result = self.sess.run([self.train_step, self.cross_entropy, self.accuracy], feed_dict=feed_dict)
             _, loss, accuracy = result
-            print("Iteration %d: loss=%f, accuracy=%f" % (i, loss, accuracy))
+            #print("Iteration %d: loss=%f, accuracy=%f" % (i, loss, accuracy))
             total_loss.append(loss)
             total_accuracy.append(accuracy)
             if self.should_save_logs:
@@ -599,26 +618,33 @@ class DenseNet:
 
 
     def train_one_epoch_sdr(self, data, batch_size, learning_rate):
-        coord = tf.train.Coordinator()
-        threads = tf.train.start_queue_runners(sess=self.sess, coord=coord)
+        #coord = tf.train.Coordinator()
+        #threads = tf.train.start_queue_runners(sess=self.sess, coord=coord)
         num_examples = data.num_examples
-        self.learning_rate = learning_rate
         total_loss = []
         total_accuracy = []
-        self.is_training = tf.constant(True, dtype=tf.bool)
+        #self.is_training = tf.constant(True, dtype=tf.bool)
         
         for i in range(num_examples // batch_size):
-            
-            sess_list1 = self.apply_ + self.sd_asn + [self.train_step] #+ self.equal
-            sess_list2 = [self.cross_entropy, self.accuracy]
-            result1 = self.sess.run(sess_list1)
-            result2 = self.sess.run(sess_list2)
+            batch = data.next_batch(batch_size)
+            images, labels = batch
+            feed_dict = {
+                self.images: images,
+                self.labels: labels,
+                self.learning_rate: learning_rate,
+                self.is_training: True,
+            }
+            sess_list1 = self.apply_ + self.sd_asn
+            sess_list2 = [self.train_step, self.cross_entropy, self.accuracy]
+            #sess_list2 = [self.cross_entropy, self.accuracy]
+            result1 = self.sess.run(sess_list1, feed_dict = feed_dict)
+            result2 = self.sess.run(sess_list2, feed_dict = feed_dict)
             #record histograms, etc. every epoch
-            if i % (num_examples // batch_size) - 1 == 0:
-                summ_ = self.sess.run(self.summaries)
+            if (not self.no_histograms) and  i % (num_examples // batch_size) - 1 == 0:
+                summ_ = self.sess.run(self.summaries, feed_dict=feed_dict)
                 self.summary_writer.add_summary(summ_)
-            loss, accuracy = result2
-            print("Iteration %d: loss=%f, accuracy=%f" % (i, loss, accuracy))
+            _, loss, accuracy = result2
+            #print("Iteration %d: loss=%f, accuracy=%f" % (i, loss, accuracy))
             total_loss.append(loss)
             total_accuracy.append(accuracy)
             if self.should_save_logs:
@@ -631,27 +657,46 @@ class DenseNet:
         mean_accuracy = np.mean(total_accuracy)
         return mean_loss, mean_accuracy
 
+
     def test(self, data, batch_size):
-        images, labels = self.input_pipeline(batch_size,
-            data, test=True)
-        self.is_training = tf.constant(False, dtype=tf.bool)
-        train_images = self.images
-        train_labels = self.labels
-        self.images = tf.cast(images, tf.float32)
-        self.labels = tf.cast(labels, tf.float32)
-
-        coord = tf.train.Coordinator()
-        threads = tf.train.start_queue_runners(sess=self.sess, coord=coord)
-
         num_examples = data.num_examples
         total_loss = []
         total_accuracy = []
         for i in range(num_examples // batch_size):
-            loss, accuracy = self.sess.run([self.cross_entropy, self.accuracy])
+            batch = data.next_batch(batch_size)
+            feed_dict = {
+                self.images: batch[0],
+                self.labels: batch[1],
+                self.is_training: False,
+            }
+            fetches = [self.cross_entropy, self.accuracy]
+            loss, accuracy = self.sess.run(fetches, feed_dict=feed_dict)
             total_loss.append(loss)
             total_accuracy.append(accuracy)
         mean_loss = np.mean(total_loss)
         mean_accuracy = np.mean(total_accuracy)
-        self.images = train_images
-        self.labels = train_labels
         return mean_loss, mean_accuracy
+#    def test(self, data, batch_size):
+#        images, labels = self.input_pipeline(batch_size,
+#            data, test=True)
+#        self.is_training = tf.constant(False, dtype=tf.bool)
+#        train_images = self.images
+#        train_labels = self.labels
+#        self.images = tf.cast(images, tf.float32)
+#        self.labels = tf.cast(labels, tf.float32)
+#
+#        coord = tf.train.Coordinator()
+#        threads = tf.train.start_queue_runners(sess=self.sess, coord=coord)
+#
+#        num_examples = data.num_examples
+#        total_loss = []
+#        total_accuracy = []
+#        for i in range(num_examples // batch_size):
+#            loss, accuracy = self.sess.run([self.cross_entropy, self.accuracy])
+#            total_loss.append(loss)
+#            total_accuracy.append(accuracy)
+#        mean_loss = np.mean(total_loss)
+#        mean_accuracy = np.mean(total_accuracy)
+#        self.images = train_images
+#        self.labels = train_labels
+#        return mean_loss, mean_accuracy

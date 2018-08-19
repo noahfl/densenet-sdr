@@ -102,9 +102,21 @@ if __name__ == '__main__':
         '--not-renew-logs', dest='renew_logs', action='store_false',
         help='Do not erase previous logs for model if exists.')
     parser.set_defaults(renew_logs=True)
+
+    parser.add_argument(
+        '--num_inter_threads', '-inter', type=int, default=1, metavar='',
+        help='number of inter threads for inference / test')
+    parser.add_argument(
+        '--num_intra_threads', '-intra', type=int, default=128, metavar='',
+        help='number of intra threads for inference / test')
+
     parser.add_argument(
         '--sdr', dest='use_sdr', action='store_true',
         help='Use Stochastic Delta Rule instead of dropout.')
+    parser.set_defaults(use_sdr=False)
+    parser.add_argument(
+        '--no_histograms', dest='no_histograms', action='store_true',
+        help='Omit histograms from logs to save disk space and speed up training')
     parser.set_defaults(use_sdr=False)
 
     args = parser.parse_args()
