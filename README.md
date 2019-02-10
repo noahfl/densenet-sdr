@@ -1,5 +1,8 @@
 # Stochastic Delta Rule implementation using DenseNet in TensorFlow
 
+
+## THIS REPOSITORY IS NO LONGER IN USE. THE NEW SDR REPOSITORY CAN BE FOUND [HERE](https://github.com/noahfl/sdr-densenet-pytorch).
+
 **NOTE** This is repository is based off of [Illarion Khlestov's DenseNet implementation](https://github.com/ikhlestov/vision_networks/ "ikhlestov/vision_networks/"). Check out his blog post about implementing DenseNet in TensorFlow [here](https://medium.com/@illarionkhlestov/notes-on-the-implementation-densenet-in-tensorflow-beeda9dd1504#.55qu3tfqm).
 
 
